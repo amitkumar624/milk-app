@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Milk Order</title>
+
+  <!-- Google Identity JS -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Tailwind (CDN) for quick styling -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="max-w-md mx-auto p-4 text-gray-800">
+
+  <!-- 1  Google Sign-In button placeholder -->
+  <div id="signin" class="flex justify-center my-6"></div>
+
+  <!-- 2  Order form -->
+  <form id="orderForm" class="space-y-3 hidden">
+    <select id="milkType" class="border p-2 w-full rounded">
+      <option>Amul</option>
+      <option>Vijaya</option>
+      <option>Jersey</option>
+      <option>Heritage (Toned)</option>
+      <option>Heritage (Full Cream)</option>
+    </select>
+
+    <input type="date"  id="forDate" class="border p-2 w-full rounded"
+           min=""    > <!-- min set in JS -->
+
+    <input type="number" step="0.5" min="0.5" id="qty"
+           placeholder="Litres (e.g. 1.5)" class="border p-2 w-full rounded">
+
+    <button class="bg-blue-600 hover:bg-blue-700 text-white w-full py-2 rounded">
+      Place / Update order
+    </button>
+  </form>
+
+  <!-- 3  Simple table of this-month orders -->
+  <table id="orderTable" class="w-full text-sm mt-8 hidden">
+    <thead><tr class="border-b font-medium">
+      <th class="py-1 text-left">Date</th>
+      <th class="py-1 text-left">Type</th>
+      <th class="py-1 text-left">Qty (L)</th>
+      <th class="py-1"></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+  /***** CONFIG — put your real values here ***************************/
+  const CLIENT_ID = '986634454355-a7t356ndh593cs87qvpp9snht1fo9109.apps.googleusercontent.com';
+  const API_URL   = 'https://script.google.com/macros/s/AKfycbxFB-ODONwlCC_dmPA0wakqajtYuc7OzfDaIKb3I6O8MgCQcsjRBR7fFZjM9JkS3OrO/exec';
+  /********************************************************************/
+
+  let idToken = '';          // will hold Google JWT
+  const $form = document.getElementById('orderForm');
+  const $table = document.getElementById('orderTable').querySelector('tbody');
+
+  /* ---------- Google Sign-In bootstrap ---------- */
+  function handleCred(resp){
+    idToken = resp.credential;
+    document.getElementById('signin').classList.add('hidden');
+    $form.classList.remove('hidden');
+    document.getElementById('orderTable').classList.remove('hidden');
+    setMinDateToday();          // UX helper
+    loadOrdersThisMonth();      // fill table
+  }
+  window.onload = () =>{
+    google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCred });
+    google.accounts.id.renderButton(document.getElementById('signin'),
+        { theme:'outline', size:'large' });        // default GIS button :contentReference[oaicite:1]{index=1}
+  };
+
+  /* ---------- Helpers ---------- */
+  function yyyyMm(){ const d=new Date(); return d.toISOString().slice(0,7); }
+  function setMinDateToday(){
+      document.getElementById('forDate').min = new Date().toISOString().slice(0,10);
+  }
+  function msg(t){ alert(t); }
+
+  /* ---------- Load & render orders ---------- */
+  async function loadOrdersThisMonth(){
+    $table.innerHTML='';
+    const r = await fetch(API_URL+`?idToken=${encodeURIComponent(idToken)}&month=${yyyyMm()}`);
+    const rows = await r.json();
+    rows.forEach(([id, ,type,qty,date,status])=>{
+      if(status!=='ACTIVE') return;
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        `<td class="py-1">${date}</td>
+         <td>${type}</td><td>${qty}</td>
+         <td><button data-id="${id}" class="text-red-600">✕</button></td>`;
+      $table.appendChild(tr);
+    });
+  }
+
+  /* ---------- New / modify / cancel ---------- */
+  $form.addEventListener('submit', async e=>{
+    e.preventDefault();
+    const body = {
+      action   : 'NEW',
+      idToken,
+      milkType : document.getElementById('milkType').value,
+      qty      : Number(document.getElementById('qty').value),
+      forDate  : document.getElementById('forDate').value
+    };
+    const res = await fetch(API_URL, {
+      method : 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body   : JSON.stringify(body)
+    });
+    const j = await res.json();
+    msg(j.ok ? 'Saved!' : j.error);
+    loadOrdersThisMonth();
+    e.target.reset();
+  });
+
+  /* cancel button inside table */
+  $table.parentElement.addEventListener('click', async e=>{
+    if(e.target.dataset.id){
+      if(!confirm('Cancel this order?')) return;
+      const body = { action:'DEL', idToken, orderId:e.target.dataset.id };
+      const r = await fetch(API_URL, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+      });
+      const j = await r.json();
+      msg(j.ok ? 'Cancelled' : j.error);
+      loadOrdersThisMonth();
+    }
+  });
+  </script>
+</body>
+</html>
