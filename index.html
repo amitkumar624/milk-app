@@ -1,150 +1,508 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Milk-Orders</title>
-
-  <!-- Google Sign-In button -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-
-  <!-- quick styling via Tailwind CDN -->
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3/dist/tailwind.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Milk Order Management (Firebase)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .calendar-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+        .calendar-day { min-height: 120px; }
+        .disabled-day { background-color: #f3f4f6; color: #9ca3af; }
+        .ordered-day { background-color: #dbeafe; border-color: #93c5fd; }
+        .today { background-color: #fef9c3; }
+        .report-selected-day { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5); z-index: 10; }
+        .hidden { display: none; }
+        .modal { transition: opacity 0.25s ease; }
+        .modal-active { display: flex; }
+    </style>
 </head>
-<body class="max-w-md mx-auto p-4 text-gray-800">
+<body class="bg-gray-100 text-gray-800">
 
-  <!-- 1 – Google button mounts here -->
-  <div id="signin" class="flex justify-center my-6"></div>
+    <div id="app-container" class="container mx-auto p-4 md:p-8 max-w-6xl">
 
-  <!-- 2 – order form -->
-  <form id="orderForm" class="space-y-3 hidden">
-    <select id="milkType" class="border p-2 w-full rounded"></select>
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Milk Order Portal</h1>
+                <p id="welcome-message" class="text-gray-600">Please log in or sign up to manage your orders.</p>
+            </div>
+            <div id="auth-actions" class="hidden items-center">
+                 <p class="text-sm text-gray-500 mr-4">Welcome, <span id="user-email-display" class="font-bold"></span></p>
+                 <button id="logout-btn" class="bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 transition">Logout</button>
+            </div>
+        </div>
+        
+        <!-- Loading Spinner -->
+        <div id="loading-spinner" class="text-center p-8">
+             <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
+             <p class="mt-4 text-lg">Loading App...</p>
+        </div>
 
-    <input type="date"  id="forDate" class="border p-2 w-full rounded">
-    <input type="number" step="0.5" min="0.5" id="qty"
-           placeholder="Litres (e.g. 1.5)" class="border p-2 w-full rounded">
 
-    <button class="bg-blue-600 hover:bg-blue-700 text-white w-full py-2 rounded">
-      Place / Update
-    </button>
-  </form>
+        <!-- Auth View -->
+        <div id="auth-view" class="hidden">
+            <div class="max-w-md mx-auto bg-white p-8 rounded-lg shadow-lg">
+                <div id="auth-tabs" class="flex border-b mb-6">
+                    <button data-tab="login" class="tab-btn flex-1 py-2 font-semibold text-blue-600 border-b-2 border-blue-600">Login</button>
+                    <button data-tab="signup" class="tab-btn flex-1 py-2 font-semibold text-gray-500">Sign Up</button>
+                </div>
+                <!-- Login Form -->
+                <form id="login-form" class="auth-form space-y-4">
+                    <h2 class="text-xl font-bold text-center">Login to Your Account</h2>
+                    <div>
+                        <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="login-email" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                    </div>
+                    <div>
+                        <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
+                        <input type="password" id="login-password" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                    </div>
+                    <p id="login-error" class="text-red-500 text-sm hidden"></p>
+                    <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">Login</button>
+                </form>
+                <!-- Signup Form -->
+                <form id="signup-form" class="auth-form space-y-4 hidden">
+                    <h2 class="text-xl font-bold text-center">Create a New Account</h2>
+                    <div>
+                        <label for="signup-name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                        <input type="text" id="signup-name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                    </div>
+                    <div>
+                        <label for="signup-email" class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="signup-email" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                    </div>
+                    <div>
+                        <label for="signup-password" class="block text-sm font-medium text-gray-700">Password (min. 6 characters)</label>
+                        <input type="password" id="signup-password" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                    </div>
+                     <p id="signup-error" class="text-red-500 text-sm hidden"></p>
+                    <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700">Sign Up</button>
+                </form>
+            </div>
+        </div>
 
-  <!-- 3 – this-month orders -->
-  <table id="orderTable" class="w-full text-sm mt-8 hidden">
-    <thead><tr class="border-b font-medium">
-      <th class="py-1 text-left">Date</th>
-      <th class="py-1 text-left">Type</th>
-      <th class="py-1 text-left">Qty (L)</th>
-      <th class="py-1"></th>
-    </tr></thead>
-    <tbody></tbody>
-  </table>
+        <!-- App View (Logged In) -->
+        <div id="app-view" class="hidden">
+            <!-- Brand Selection -->
+             <div class="bg-white p-6 rounded-lg shadow mb-8">
+                <h2 class="text-xl font-semibold mb-4">Select Milk Brand</h2>
+                <select id="milk-brand" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm p-2">
+                    <!-- Options populated by JS -->
+                </select>
+                <p class="mt-2 text-lg font-medium">Rate: <span id="milk-rate" class="text-green-600"></span></p>
+            </div>
 
-  <!-- =============== everything else is inline JS =============== -->
-  <script>
-  /* ————— CONFIG ————— */
-  const CLIENT_ID = '986634454355-a7t356ndh593cs87qvpp9snht1fo9109.apps.googleusercontent.com';
-  const API_URL   = 'https://script.google.com/macros/s/AKfycbxFB-ODONwlCC_dmPA0wakqajtYuc7OzfDaIKb3I6O8MgCQcsjRBR7fFZjM9JkS3OrO/exec';  // ends with /exec
-  /* —————————————————— */
+            <!-- Calendar -->
+            <div id="calendar-container" class="bg-white rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <button id="prev-month" class="p-2 rounded-full hover:bg-gray-200 text-lg font-bold">&lt;</button>
+                    <h2 id="month-year" class="text-2xl font-bold"></h2>
+                    <button id="next-month" class="p-2 rounded-full hover:bg-gray-200 text-lg font-bold">&gt;</button>
+                </div>
+                <div class="grid grid-cols-7 gap-1 text-center font-semibold text-gray-600 mb-2">
+                    <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+                </div>
+                <div id="calendar-grid" class="calendar-grid gap-2"></div>
+            </div>
 
-  /* global state refs */
-  let idToken = '';
-  const $signin = document.getElementById('signin');
-  const $form   = document.getElementById('orderForm');
-  const $table  = document.getElementById('orderTable');
-  const $tbody  = $table.querySelector('tbody');
-  const $milk   = document.getElementById('milkType');
-  const $date   = document.getElementById('forDate');
-  const $qty    = document.getElementById('qty');
+            <!-- Owner Dashboard -->
+             <div id="owner-dashboard" class="hidden mt-8 bg-white rounded-lg shadow-lg p-6">
+                 <h2 class="text-2xl font-bold mb-4">Owner Dashboard</h2>
+                 <p class="mb-4 text-gray-600">Click any date on the calendar to select it for reporting. Then click the button below.</p>
+                 <button id="generate-selected-date-report" class="w-full bg-indigo-600 text-white py-3 px-6 rounded-md hover:bg-indigo-700 transition duration-300 mb-4 hidden">Generate Report for Selected Date</button>
+                 <div class="flex flex-col md:flex-row gap-4">
+                     <button id="generate-daily-report" class="flex-1 bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700">Get Tomorrow's Orders</button>
+                     <button id="generate-monthly-report" class="flex-1 bg-purple-600 text-white py-3 px-6 rounded-md hover:bg-purple-700">Get Last Month's Bills</button>
+                 </div>
+             </div>
+        </div>
+    </div>
 
-  /* ========== 0. page-load bootstrap ========== */
-  window.addEventListener('DOMContentLoaded', () => {
-    /* 0-A Google sign-in */
-    google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onGoogleSignIn });
-    google.accounts.id.renderButton($signin, { theme:'outline', size:'large' });
+    <!-- Modals -->
+    <div id="order-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-2">Order for <span id="modal-date"></span></h2>
+            <div id="modal-cutoff-warning" class="hidden p-3 mb-4 text-sm text-yellow-800 bg-yellow-100 rounded-lg">Orders for tomorrow cannot be changed after 9:00 PM.</div>
+            <p>Current Order: <span id="current-order-details" class="font-semibold">No order placed.</span></p>
+            <div class="my-4">
+                <label for="milk-quantity" class="block text-sm font-medium">Quantity (Litres)</label>
+                <input type="number" id="milk-quantity" min="0" step="0.5" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+            </div>
+            <div class="mt-6 flex gap-4">
+                <button id="save-order-btn" class="flex-1 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">Save</button>
+                <button id="delete-order-btn" class="flex-1 bg-red-600 text-white py-2 rounded-md hover:bg-red-700">Delete</button>
+                <button id="close-modal-btn" class="flex-1 bg-gray-300 py-2 rounded-md hover:bg-gray-400">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div id="report-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-3xl h-full max-h-[90vh] flex flex-col">
+            <h2 id="report-title" class="text-2xl font-bold mb-4">Report</h2>
+            <div id="report-content" class="flex-grow overflow-y-auto pr-4"></div>
+            <div class="mt-6 text-right">
+                <button id="close-report-btn" class="bg-blue-600 text-white py-2 px-6 rounded-md hover:bg-blue-700">Close</button>
+            </div>
+        </div>
+    </div>
 
-    /* 0-B fill dropdown from backend (public route) */
-    fetch(API_URL + '?meta=prices')
-      .then(r => r.json())
-      .then(rows => {
-        rows.slice(1).forEach(r => {            // skip header row
-          const opt = document.createElement('option');
-          opt.textContent = r[0];
-          $milk.appendChild(opt);
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, addDoc, onSnapshot, query, where, deleteDoc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- PASTE YOUR FIREBASE CONFIGURATION HERE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBUqCvuNdRS1abL3icyudrquzOHWDHK7Lo",
+            authDomain: "milkapp-99947.firebaseapp.com",
+            projectId: "milkapp-99947",
+            storageBucket: "milkapp-99947.appspot.com",
+            messagingSenderId: "624252437570",
+            appId: "1:624252437570:web:570da5bce1f3740e3199db"
+        };
+        
+        // --- APP CONFIGURATION ---
+        const ownerEmails = ["jain.amit1998@gmail.com"]; // Add business owner's email here
+        const milkBrands = [
+            { id: 'brand-a', name: 'Amul Gold', rate: 66 },
+            { id: 'brand-b', name: 'Mother Dairy', rate: 66 },
+            { id: 'brand-c', name: 'Nandini', rate: 50 },
+        ];
+        const ORDER_CUTOFF_HOUR = 21; // 9 PM
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- GLOBAL STATE ---
+        let currentDate = new Date();
+        let currentUser = null; 
+        let userOrders = {}; 
+        let ownerSelectedDate = null;
+        let unsubscribeOrders = null; 
+
+        // --- ELEMENT SELECTORS ---
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const authView = document.getElementById('auth-view');
+        const appView = document.getElementById('app-view');
+        const authActions = document.getElementById('auth-actions');
+        const selectedDateReportBtn = document.getElementById('generate-selected-date-report');
+
+        // --- FIREBASE AUTH LOGIC ---
+        onAuthStateChanged(auth, async (user) => {
+            loadingSpinner.classList.remove('hidden');
+            authView.classList.add('hidden');
+            appView.classList.add('hidden');
+            
+            if (user) {
+                const userDocRef = doc(db, "users", user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                currentUser = { uid: user.uid, email: user.email, name: userDocSnap.exists() ? userDocSnap.data().name : user.email };
+                
+                document.getElementById('welcome-message').textContent = `Manage orders for ${currentUser.name}`;
+                document.getElementById('user-email-display').textContent = currentUser.email;
+
+                listenForOrders();
+
+                authActions.classList.add('flex');
+                authActions.classList.remove('hidden');
+                appView.classList.remove('hidden');
+                authView.classList.add('hidden');
+                
+                if(ownerEmails.includes(currentUser.email)) {
+                    document.getElementById('owner-dashboard').classList.remove('hidden');
+                    document.getElementById('milk-brand').parentElement.classList.add('hidden'); // Hide brand selection for owner
+                } else {
+                     document.getElementById('owner-dashboard').classList.add('hidden');
+                     document.getElementById('milk-brand').parentElement.classList.remove('hidden'); // Show for customers
+                }
+
+            } else {
+                currentUser = null;
+                document.getElementById('welcome-message').textContent = "Please log in or sign up to manage your orders.";
+
+                if (unsubscribeOrders) unsubscribeOrders();
+                userOrders = {};
+
+                authActions.classList.add('hidden');
+                authActions.classList.remove('flex');
+                appView.classList.add('hidden');
+                authView.classList.remove('hidden');
+                document.getElementById('owner-dashboard').classList.add('hidden');
+                selectedDateReportBtn.classList.add('hidden');
+                ownerSelectedDate = null;
+            }
+             loadingSpinner.classList.add('hidden');
+             setupUI();
         });
-      })
-      .catch(err => console.error('Dropdown load error', err));
-  });
 
-  /* —— token callback —— */
-  function onGoogleSignIn(resp){
-    idToken = resp.credential;
-    $signin.classList.add('hidden');
-    $form.classList.remove('hidden');
-    $table.classList.remove('hidden');
+        // --- FIRESTORE REAL-TIME LISTENER ---
+        function listenForOrders() {
+            if (unsubscribeOrders) unsubscribeOrders(); 
+            if (!currentUser) return;
+            
+            const q = query(collection(db, "orders"), where("userId", "==", currentUser.uid));
+            unsubscribeOrders = onSnapshot(q, (querySnapshot) => {
+                userOrders = {}; 
+                querySnapshot.forEach((doc) => {
+                    userOrders[doc.data().date] = { id: doc.id, ...doc.data() };
+                });
+                renderCalendar(); 
+            });
+        }
+        
+        // --- CALENDAR & DATE HANDLING ---
+        function renderCalendar() {
+            const calendarGrid = document.getElementById('calendar-grid');
+            if(!calendarGrid) return;
+            
+            calendarGrid.innerHTML = '';
+            document.getElementById('month-year').textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const firstDayOfMonth = new Date(year, month, 1);
+            const lastDayOfMonth = new Date(year, month + 1, 0);
+            const startDayOfWeek = firstDayOfMonth.getDay();
+            const today = new Date();
+            today.setHours(0,0,0,0);
 
-    /* block past days */
-    $date.min = new Date().toISOString().slice(0,10);
+            for (let i = 0; i < startDayOfWeek; i++) {
+                calendarGrid.appendChild(document.createElement('div'));
+            }
 
-    loadOrders();
-  }
+            for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
+                const dayEl = document.createElement('div');
+                const date = new Date(year, month, day);
+                const dateString = toYYYYMMDD(date);
+                
+                dayEl.className = 'calendar-day relative p-2 border rounded-md transition-colors';
+                dayEl.innerHTML = `<span class="font-semibold">${day}</span>`;
+                
+                if (date < today && toYYYYMMDD(date) !== toYYYYMMDD(today)) {
+                    dayEl.classList.add('disabled-day');
+                } else {
+                    dayEl.classList.add('cursor-pointer', 'hover:bg-blue-100');
+                    dayEl.addEventListener('click', () => handleDateClick(date));
+                }
+                
+                if (dateString === toYYYYMMDD(today)) dayEl.classList.add('today');
 
-  /* helper yyyy-MM for query */
-  const thisMonth = () => new Date().toISOString().slice(0,7);
+                if (userOrders[dateString]) {
+                    const order = userOrders[dateString];
+                    dayEl.classList.add('ordered-day');
+                    const orderInfo = document.createElement('p');
+                    orderInfo.className = 'text-xs mt-2 text-blue-800';
+                    orderInfo.textContent = `${order.quantity}L - ${order.brandName}`;
+                    dayEl.appendChild(orderInfo);
+                }
 
-  /* ========== 1. pull & render existing orders ========== */
-  async function loadOrders(){
-    $tbody.innerHTML = '';
-    const url = `${API_URL}?idToken=${encodeURIComponent(idToken)}&month=${thisMonth()}`;
-    const rows = await fetch(url).then(r => r.json()).catch(console.error);
-    rows.forEach(([id,,type,qty,date,status])=>{
-      if(status!=='ACTIVE') return;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="py-1">${date}</td>
-        <td>${type}</td>
-        <td>${qty}</td>
-        <td><button data-id="${id}" class="text-red-600">✕</button></td>`;
-      $tbody.appendChild(tr);
-    });
-  }
+                if (ownerSelectedDate && dateString === toYYYYMMDD(ownerSelectedDate)) {
+                    dayEl.classList.add('report-selected-day');
+                }
+                calendarGrid.appendChild(dayEl);
+            }
+        }
 
-  /* ========== 2. new order submit ========== */
-  $form.addEventListener('submit', async evt=>{
-    evt.preventDefault();
-    const body = {
-      action  : 'NEW',
-      idToken : idToken,
-      milkType: $milk.value,
-      qty     : Number($qty.value),
-      forDate : $date.value
-    };
-    try{
-      const r = await fetch(API_URL, {
-        method :'POST',
-        headers:{'Content-Type':'application/json'},
-        body   : JSON.stringify(body)
-      });
-      const j = await r.json();
-      alert(j.ok ? 'Order saved' : 'Error: '+j.error);
-      if(j.ok){ $form.reset(); loadOrders(); }
-    }catch(e){ alert('Network error'); console.error(e); }
-  });
+        function handleDateClick(date) {
+            if (currentUser && ownerEmails.includes(currentUser.email)) {
+                ownerSelectedDate = date;
+                const dateString = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                selectedDateReportBtn.textContent = `Generate Report for ${dateString}`;
+                selectedDateReportBtn.classList.remove('hidden');
+                renderCalendar(); // Re-render to show selection highlight
+            } else {
+                openOrderModal(date);
+            }
+        }
 
-  /* ========== 3. cancel with red × ========== */
-  $tbody.addEventListener('click', async evt=>{
-    const id = evt.target.dataset.id;
-    if(!id) return;
-    if(!confirm('Cancel this order?')) return;
-    const j = await fetch(API_URL,{
-      method :'POST',
-      headers:{'Content-Type':'application/json'},
-      body   : JSON.stringify({ action:'DEL', idToken:idToken, orderId:id })
-    }).then(r=>r.json()).catch(e=>({error:e}));
-    alert(j.ok ? 'Cancelled' : 'Error: '+j.error);
-    if(j.ok) loadOrders();
-  });
-  </script>
-  <!-- ============ end inline script ============ -->
+        // --- REPORT GENERATION ---
+        async function generateConsolidatedReport(date) {
+            const dateString = toYYYYMMDD(date);
+            openReportModal(`Daily Report for ${dateString}`, '<p class="text-center">Loading report...</p>');
+            
+            const q = query(collection(db, "orders"), where("date", "==", dateString));
+            const querySnapshot = await getDocs(q);
+            
+            const ordersForDate = [];
+            querySnapshot.forEach((doc) => ordersForDate.push(doc.data()));
 
+            let reportHTML;
+            if (ordersForDate.length === 0) {
+                reportHTML = `<p>No orders found for ${dateString}.</p>`;
+            } else {
+                const brandTotals = {};
+                milkBrands.forEach(b => brandTotals[b.id] = { name: b.name, total: 0 });
+
+                let orderListHTML = `<table class="w-full text-left border-collapse"><thead><tr class="bg-gray-100"><th class="p-2 border">Customer</th><th class="p-2 border">Brand</th><th class="p-2 border text-right">Quantity (L)</th></tr></thead><tbody>`;
+                
+                ordersForDate.sort((a,b) => a.userName.localeCompare(b.userName)).forEach(order => {
+                    orderListHTML += `<tr><td class="p-2 border">${order.userName}</td><td class="p-2 border">${order.brandName}</td><td class="p-2 border text-right">${order.quantity.toFixed(1)}</td></tr>`;
+                    if (brandTotals[order.brandId]) {
+                        brandTotals[order.brandId].total += order.quantity;
+                    }
+                });
+                orderListHTML += '</tbody></table>';
+                
+                let totalsHTML = `<h3 class="text-xl font-bold mt-6 mb-2">Total Milk to Purchase</h3>`;
+                Object.values(brandTotals).forEach((brand) => {
+                    if (brand.total > 0) {
+                        totalsHTML += `<p>${brand.name}: <strong>${brand.total.toFixed(1)} Litres</strong></p>`;
+                    }
+                });
+                
+                reportHTML = `<p class="mb-4">Total orders: <strong>${ordersForDate.length}</strong></p>${orderListHTML}${totalsHTML}`;
+            }
+            document.getElementById('report-content').innerHTML = reportHTML;
+        }
+
+        async function generateMonthlyBills() {
+            const lastMonthDate = new Date();
+            lastMonthDate.setDate(0);
+            const year = lastMonthDate.getFullYear();
+            const month = lastMonthDate.getMonth();
+            const monthName = lastMonthDate.toLocaleString('default', { month: 'long' });
+
+            const firstDayStr = toYYYYMMDD(new Date(year, month, 1));
+            const lastDayStr = toYYYYMMDD(new Date(year, month + 1, 0));
+            
+            openReportModal(`Monthly Bills for ${monthName} ${year}`, '<p class="text-center">Loading bills...</p>');
+
+            const q = query(collection(db, "orders"), where("date", ">=", firstDayStr), where("date", "<=", lastDayStr));
+            const querySnapshot = await getDocs(q);
+
+            let reportHTML;
+            if (querySnapshot.empty) {
+                reportHTML = `<p>No orders found for ${monthName} ${year}.</p>`;
+            } else {
+                const userBills = {};
+                querySnapshot.forEach(doc => {
+                    const order = doc.data();
+                    if (!userBills[order.userId]) {
+                        userBills[order.userId] = { name: order.userName, totalAmount: 0, orders: [] };
+                    }
+                    userBills[order.userId].totalAmount += order.totalPrice;
+                    userBills[order.userId].orders.push(order);
+                });
+                
+                reportHTML = '';
+                Object.values(userBills).sort((a,b) => a.name.localeCompare(b.name)).forEach(bill => {
+                    reportHTML += `<div class="mb-6 p-4 border rounded-lg"><h4 class="text-lg font-bold">${bill.name} - Bill Total: ₹${bill.totalAmount.toFixed(2)}</h4><table class="w-full text-sm mt-2"><thead><tr class="bg-gray-50"><th class="text-left p-1">Date</th><th class="text-left p-1">Brand</th><th class="text-right p-1">Qty</th><th class="text-right p-1">Cost</th></tr></thead><tbody>`;
+                    bill.orders.sort((a,b) => new Date(a.date) - new Date(b.date)).forEach(o => {
+                       reportHTML += `<tr><td class="p-1">${o.date}</td><td class="p-1">${o.brandName}</td><td class="text-right p-1">${o.quantity.toFixed(1)}L</td><td class="text-right p-1">₹${o.totalPrice.toFixed(2)}</td></tr>`;
+                    });
+                    reportHTML += '</tbody></table></div>';
+                });
+            }
+             document.getElementById('report-content').innerHTML = reportHTML;
+        }
+
+        // --- EVENT LISTENERS ---
+        selectedDateReportBtn.addEventListener('click', () => {
+            if (ownerSelectedDate) generateConsolidatedReport(ownerSelectedDate);
+        });
+        document.getElementById('generate-daily-report').addEventListener('click', () => {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            generateConsolidatedReport(tomorrow);
+        });
+        document.getElementById('generate-monthly-report').addEventListener('click', generateMonthlyBills);
+        
+        document.querySelectorAll('.tab-btn').forEach(button => button.addEventListener('click', (e) => {
+            const tab = e.currentTarget.dataset.tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.replace('text-blue-600','text-gray-500') || btn.classList.remove('border-blue-600'));
+            e.currentTarget.classList.add('text-blue-600', 'border-blue-600');
+            document.querySelectorAll('.auth-form').forEach(form => form.classList.add('hidden'));
+            document.getElementById(`${tab}-form`).classList.remove('hidden');
+        }));
+         document.getElementById('signup-form').addEventListener('submit', async (e) => { e.preventDefault(); const n=document.getElementById('signup-name').value,em=document.getElementById('signup-email').value,pw=document.getElementById('signup-password').value,er=document.getElementById('signup-error');try{const uc=await createUserWithEmailAndPassword(auth,em,pw);await setDoc(doc(db,"users",uc.user.uid),{name:n,email:em});}catch(e){er.textContent=e.message;er.classList.remove('hidden')}});
+         document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault(); const em=document.getElementById('login-email').value,pw=document.getElementById('login-password').value,er=document.getElementById('login-error');try{await signInWithEmailAndPassword(auth,em,pw)}catch(e){er.textContent=e.message;er.classList.remove('hidden')}});
+        document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+        document.getElementById('save-order-btn').addEventListener('click', saveOrder);
+        document.getElementById('delete-order-btn').addEventListener('click', deleteOrder);
+        document.getElementById('close-modal-btn').addEventListener('click', () => document.getElementById('order-modal').classList.add('hidden'));
+        document.getElementById('close-report-btn').addEventListener('click', () => document.getElementById('report-modal').classList.add('hidden'));
+        document.getElementById('milk-brand')?.addEventListener('change', updateRateDisplay);
+        document.getElementById('prev-month')?.addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar(); });
+        document.getElementById('next-month')?.addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar(); });
+
+        // --- FUNCTIONS ---
+        function openReportModal(title, content) {
+            document.getElementById('report-title').textContent = title;
+            document.getElementById('report-content').innerHTML = content;
+            document.getElementById('report-modal').classList.remove('hidden');
+        }
+
+        async function saveOrder() {
+            const quantity = parseFloat(document.getElementById('milk-quantity').value);
+            if (isNaN(quantity) || quantity <= 0 || quantity % 0.5 !== 0) {
+                alert('Please enter a valid quantity in multiples of 0.5.');
+                return;
+            }
+            const dateString = toYYYYMMDD(selectedDate);
+            const selectedBrandId = document.getElementById('milk-brand').value;
+            const brand = milkBrands.find(b => b.id === selectedBrandId);
+            const orderData = { userId: currentUser.uid, userName: currentUser.name, date: dateString, quantity, brandId: brand.id, brandName: brand.name, rate: brand.rate, totalPrice: quantity * brand.rate, updatedAt: new Date() };
+            try {
+                if (userOrders[dateString]) {
+                    await updateDoc(doc(db, "orders", userOrders[dateString].id), orderData);
+                } else {
+                    await addDoc(collection(db, "orders"), orderData);
+                }
+                document.getElementById('order-modal').classList.add('hidden');
+            } catch (error) { console.error("Error saving order: ", error); alert("Could not save the order."); }
+        }
+        async function deleteOrder() {
+            const dateString = toYYYYMMDD(selectedDate);
+            if (userOrders[dateString] && confirm('Are you sure you want to delete this order?')) {
+                try {
+                    await deleteDoc(doc(db, "orders", userOrders[dateString].id));
+                    document.getElementById('order-modal').classList.add('hidden');
+                } catch (error) { console.error("Error deleting order: ", error); alert("Could not delete the order."); }
+            }
+        }
+        let selectedDate = null;
+        function openOrderModal(date) {
+            selectedDate = date;
+            const modal = document.getElementById('order-modal');
+            modal.classList.remove('hidden');
+            document.getElementById('modal-date').textContent = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+            const order = userOrders[toYYYYMMDD(date)];
+            document.getElementById('milk-quantity').value = order ? order.quantity : '';
+            document.getElementById('current-order-details').textContent = order ? `${order.quantity}L of ${order.brandName}` : "No order placed.";
+            document.getElementById('delete-order-btn').classList.toggle('hidden', !order);
+            const now = new Date(); const tomorrow = new Date(); tomorrow.setDate(now.getDate() + 1);
+            const isAfterCutoff = toYYYYMMDD(selectedDate) === toYYYYMMDD(tomorrow) && now.getHours() >= ORDER_CUTOFF_HOUR;
+            document.getElementById('modal-cutoff-warning').classList.toggle('hidden', !isAfterCutoff);
+            ['save-order-btn', 'delete-order-btn', 'milk-quantity'].forEach(id => document.getElementById(id).disabled = isAfterCutoff);
+        }
+        function setupUI() {
+            const brandSelect = document.getElementById('milk-brand');
+            if(!brandSelect) return;
+            brandSelect.innerHTML = '';
+            milkBrands.forEach(brand => {
+                const option = document.createElement('option');
+                option.value = brand.id;
+                option.textContent = brand.name;
+                brandSelect.appendChild(option);
+            });
+            updateRateDisplay();
+            renderCalendar();
+        }
+        function updateRateDisplay() {
+            const rateDisplay = document.getElementById('milk-rate');
+            const selectedBrandId = document.getElementById('milk-brand').value;
+            const brand = milkBrands.find(b => b.id === selectedBrandId);
+            if(rateDisplay && brand) {
+                rateDisplay.textContent = `₹${brand.rate.toFixed(2)} / Litre`;
+            }
+        }
+        const toYYYYMMDD = (date) => date.toISOString().split('T')[0];
+    </script>
 </body>
 </html>
