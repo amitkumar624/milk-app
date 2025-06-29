@@ -10,9 +10,9 @@
         body { font-family: 'Inter', sans-serif; }
         .calendar-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
         .calendar-day { min-height: 120px; }
-        .disabled-day { background-color: #f3f4f6; color: #9ca3af; }
+        .disabled-day { background-color: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
         .ordered-day { background-color: #dbeafe; border-color: #93c5fd; }
-        .today { background-color: #fef9c3; }
+        .today { background-color: #fef9c3; border: 1px solid #facc15; }
         .report-selected-day { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5); z-index: 10; }
         .hidden { display: none; }
         .modal { transition: opacity 0.25s ease; }
@@ -122,10 +122,11 @@
     </div>
 
     <!-- Modals -->
-    <div id="order-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4 hidden">
+    <!-- FIX: Added z-50 to ensure modals appear above all other content -->
+    <div id="order-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4 hidden z-50">
         <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
             <h2 class="text-2xl font-bold mb-2">Order for <span id="modal-date"></span></h2>
-            <div id="modal-cutoff-warning" class="hidden p-3 mb-4 text-sm text-yellow-800 bg-yellow-100 rounded-lg">Orders for tomorrow cannot be changed after 9:00 PM.</div>
+            <div id="modal-cutoff-warning" class="hidden p-3 mb-4 text-sm text-yellow-800 bg-yellow-100 rounded-lg">Orders for tomorrow are locked after 9:00 PM.</div>
             <p>Current Order: <span id="current-order-details" class="font-semibold">No order placed.</span></p>
             <div class="my-4">
                 <label for="milk-quantity" class="block text-sm font-medium">Quantity (Litres)</label>
@@ -138,7 +139,7 @@
             </div>
         </div>
     </div>
-    <div id="report-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4 hidden">
+    <div id="report-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center p-4 hidden z-50">
         <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-3xl h-full max-h-[90vh] flex flex-col">
             <h2 id="report-title" class="text-2xl font-bold mb-4">Report</h2>
             <div id="report-content" class="flex-grow overflow-y-auto pr-4"></div>
@@ -184,7 +185,16 @@
         let currentUser = null; 
         let userOrders = {}; 
         let ownerSelectedDate = null;
+        let selectedDate = null;
         let unsubscribeOrders = null; 
+
+        // --- HELPER FUNCTION ---
+        const toYYYYMMDD = (date) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
 
         // --- ELEMENT SELECTORS ---
         const loadingSpinner = document.getElementById('loading-spinner');
@@ -216,10 +226,10 @@
                 
                 if(ownerEmails.includes(currentUser.email)) {
                     document.getElementById('owner-dashboard').classList.remove('hidden');
-                    document.getElementById('milk-brand').parentElement.classList.add('hidden'); // Hide brand selection for owner
+                    document.getElementById('milk-brand').parentElement.classList.add('hidden');
                 } else {
                      document.getElementById('owner-dashboard').classList.add('hidden');
-                     document.getElementById('milk-brand').parentElement.classList.remove('hidden'); // Show for customers
+                     document.getElementById('milk-brand').parentElement.classList.remove('hidden');
                 }
 
             } else {
@@ -259,7 +269,7 @@
         // --- CALENDAR & DATE HANDLING ---
         function renderCalendar() {
             const calendarGrid = document.getElementById('calendar-grid');
-            if(!calendarGrid) return;
+            if(!calendarGrid || !currentUser) return;
             
             calendarGrid.innerHTML = '';
             document.getElementById('month-year').textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -269,8 +279,13 @@
             const firstDayOfMonth = new Date(year, month, 1);
             const lastDayOfMonth = new Date(year, month + 1, 0);
             const startDayOfWeek = firstDayOfMonth.getDay();
+
             const today = new Date();
             today.setHours(0,0,0,0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+
+            const isOwner = ownerEmails.includes(currentUser.email);
 
             for (let i = 0; i < startDayOfWeek; i++) {
                 calendarGrid.appendChild(document.createElement('div'));
@@ -279,19 +294,27 @@
             for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
                 const dayEl = document.createElement('div');
                 const date = new Date(year, month, day);
+                date.setHours(0,0,0,0);
                 const dateString = toYYYYMMDD(date);
                 
                 dayEl.className = 'calendar-day relative p-2 border rounded-md transition-colors';
                 dayEl.innerHTML = `<span class="font-semibold">${day}</span>`;
                 
-                if (date < today && toYYYYMMDD(date) !== toYYYYMMDD(today)) {
-                    dayEl.classList.add('disabled-day');
-                } else {
-                    dayEl.classList.add('cursor-pointer', 'hover:bg-blue-100');
+                if (isOwner) {
+                    dayEl.classList.add('cursor-pointer', 'hover:bg-indigo-100');
                     dayEl.addEventListener('click', () => handleDateClick(date));
+                } else {
+                    if (date < tomorrow) {
+                        dayEl.classList.add('disabled-day');
+                    } else {
+                        dayEl.classList.add('cursor-pointer', 'hover:bg-blue-100');
+                        dayEl.addEventListener('click', () => handleDateClick(date));
+                    }
                 }
                 
-                if (dateString === toYYYYMMDD(today)) dayEl.classList.add('today');
+                if (date.getTime() === today.getTime()) {
+                    dayEl.classList.add('today');
+                }
 
                 if (userOrders[dateString]) {
                     const order = userOrders[dateString];
@@ -302,7 +325,7 @@
                     dayEl.appendChild(orderInfo);
                 }
 
-                if (ownerSelectedDate && dateString === toYYYYMMDD(ownerSelectedDate)) {
+                if (isOwner && ownerSelectedDate && dateString === toYYYYMMDD(ownerSelectedDate)) {
                     dayEl.classList.add('report-selected-day');
                 }
                 calendarGrid.appendChild(dayEl);
@@ -315,10 +338,44 @@
                 const dateString = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
                 selectedDateReportBtn.textContent = `Generate Report for ${dateString}`;
                 selectedDateReportBtn.classList.remove('hidden');
-                renderCalendar(); // Re-render to show selection highlight
+                renderCalendar();
             } else {
                 openOrderModal(date);
             }
+        }
+
+        function openOrderModal(date) {
+            selectedDate = date;
+            const modal = document.getElementById('order-modal');
+            
+            document.getElementById('modal-date').textContent = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+            const order = userOrders[toYYYYMMDD(date)];
+            document.getElementById('milk-quantity').value = order ? order.quantity : '';
+            document.getElementById('current-order-details').textContent = order ? `${order.quantity}L of ${order.brandName}` : "No order placed.";
+            document.getElementById('delete-order-btn').classList.toggle('hidden', !order);
+            
+            const now = new Date();
+            const tomorrow = new Date();
+            tomorrow.setHours(0,0,0,0);
+            tomorrow.setDate(now.getDate() + 1);
+
+            const selectedDateMidnight = new Date(selectedDate);
+            selectedDateMidnight.setHours(0,0,0,0);
+            
+            let isLocked = false;
+            if (selectedDateMidnight.getTime() === tomorrow.getTime() && now.getHours() >= ORDER_CUTOFF_HOUR) {
+                isLocked = true;
+            }
+
+            document.getElementById('modal-cutoff-warning').classList.toggle('hidden', !isLocked);
+            ['save-order-btn', 'delete-order-btn', 'milk-quantity'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) { element.disabled = isLocked; }
+            });
+
+            modal.classList.remove('hidden');
+            modal.classList.add('modal-active');
         }
 
         // --- REPORT GENERATION ---
@@ -420,8 +477,8 @@
             document.querySelectorAll('.auth-form').forEach(form => form.classList.add('hidden'));
             document.getElementById(`${tab}-form`).classList.remove('hidden');
         }));
-         document.getElementById('signup-form').addEventListener('submit', async (e) => { e.preventDefault(); const n=document.getElementById('signup-name').value,em=document.getElementById('signup-email').value,pw=document.getElementById('signup-password').value,er=document.getElementById('signup-error');try{const uc=await createUserWithEmailAndPassword(auth,em,pw);await setDoc(doc(db,"users",uc.user.uid),{name:n,email:em});}catch(e){er.textContent=e.message;er.classList.remove('hidden')}});
-         document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault(); const em=document.getElementById('login-email').value,pw=document.getElementById('login-password').value,er=document.getElementById('login-error');try{await signInWithEmailAndPassword(auth,em,pw)}catch(e){er.textContent=e.message;er.classList.remove('hidden')}});
+         document.getElementById('signup-form').addEventListener('submit', async (e) => { e.preventDefault(); const n=document.getElementById('signup-name').value,em=document.getElementById('signup-email').value,pw=document.getElementById('signup-password').value,er=document.getElementById('signup-error');try{const uc=await createUserWithEmailAndPassword(auth,em,pw);await setDoc(doc(db,"users",uc.user.uid),{name:n,email:em});er.classList.add('hidden');}catch(e){er.textContent=e.message;er.classList.remove('hidden')}});
+         document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault(); const em=document.getElementById('login-email').value,pw=document.getElementById('login-password').value,er=document.getElementById('login-error');try{await signInWithEmailAndPassword(auth,em,pw);er.classList.add('hidden');}catch(e){er.textContent=e.message;er.classList.remove('hidden')}});
         document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
         document.getElementById('save-order-btn').addEventListener('click', saveOrder);
         document.getElementById('delete-order-btn').addEventListener('click', deleteOrder);
@@ -466,21 +523,7 @@
                 } catch (error) { console.error("Error deleting order: ", error); alert("Could not delete the order."); }
             }
         }
-        let selectedDate = null;
-        function openOrderModal(date) {
-            selectedDate = date;
-            const modal = document.getElementById('order-modal');
-            modal.classList.remove('hidden');
-            document.getElementById('modal-date').textContent = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-            const order = userOrders[toYYYYMMDD(date)];
-            document.getElementById('milk-quantity').value = order ? order.quantity : '';
-            document.getElementById('current-order-details').textContent = order ? `${order.quantity}L of ${order.brandName}` : "No order placed.";
-            document.getElementById('delete-order-btn').classList.toggle('hidden', !order);
-            const now = new Date(); const tomorrow = new Date(); tomorrow.setDate(now.getDate() + 1);
-            const isAfterCutoff = toYYYYMMDD(selectedDate) === toYYYYMMDD(tomorrow) && now.getHours() >= ORDER_CUTOFF_HOUR;
-            document.getElementById('modal-cutoff-warning').classList.toggle('hidden', !isAfterCutoff);
-            ['save-order-btn', 'delete-order-btn', 'milk-quantity'].forEach(id => document.getElementById(id).disabled = isAfterCutoff);
-        }
+        
         function setupUI() {
             const brandSelect = document.getElementById('milk-brand');
             if(!brandSelect) return;
@@ -502,7 +545,6 @@
                 rateDisplay.textContent = `₹${brand.rate.toFixed(2)} / Litre`;
             }
         }
-        const toYYYYMMDD = (date) => date.toISOString().split('T')[0];
     </script>
 </body>
 </html>
